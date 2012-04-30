@@ -23,6 +23,15 @@ Puppet::Type.type(:x_computer).provide(:x_computer) do
   }
 
   def create
+    # Records with a HardwareUUID or ENetAddress that matches the resource spec will be destroyed
+    if @dupes
+      unless @dupes.empty?
+        @dupes.each do |dupe|
+          info("Removing duplicate computer record: #{dupe}")
+          dsclcmd "/Local/#{resource[:dslocal_node]}", "-delete", "/Computers/#{dupe}"
+        end
+      end
+    end
     info("Creating computer record: #{resource[:name]}")
     guid = uuidgen.chomp
     if @computer
@@ -59,7 +68,26 @@ Puppet::Type.type(:x_computer).provide(:x_computer) do
     else
       return false
     end
-    true
+    @dupes = find_duplicate_records
+    return @dupes.empty?
+  end
+
+  # Find comptuer records with duplicate HardwareUUIDs or ENetAddress
+  def find_duplicate_records
+    unique_attribs = ['dsAttrTypeStandard:ENetAddress', 'dsAttrTypeStandard:HardwareUUID']
+    all_computers = `/usr/bin/dscl /Local/#{resource[:dslocal_node]} -list /Computers`.split("\n")
+    all_computers.reject! { |r| r.eql?("#{resource[:name]}") }
+    duplicate_records = []
+    all_computers.each do |record|
+      unique_attribs.each do |attrib|
+        string = `/usr/bin/dscl /Local/MCX -read /Computers/#{record} #{attrib} 2> /dev/null`
+        unless string.nil?
+          value = string.split[1]
+          duplicate_records << record if value =~ /#{resource[@@req_attrib_map_computer[attrib]]}/
+        end
+      end
+    end
+    duplicate_records.uniq
   end
 
   # Returns a hash of computer properties
