@@ -59,6 +59,7 @@ Puppet::Type.type(:x_computer).provide(:x_computer) do
     @kernel_version_major = Facter.kernelmajversion.to_i
     @@req_attrib_map_computer.delete('dsAttrTypeStandard:HardwareUUID') if @kernel_version_major == 9
     @needs_repair = []
+    @dupes = find_duplicate_records
     @computer = get_computer(resource[:name])
     if @computer
       @@req_attrib_map_computer.each do |key,value|
@@ -68,13 +69,13 @@ Puppet::Type.type(:x_computer).provide(:x_computer) do
     else
       return false
     end
-    @dupes = find_duplicate_records
     return @dupes.empty?
   end
 
   # Find comptuer records with duplicate HardwareUUIDs or ENetAddress
   def find_duplicate_records
     unique_attribs = ['dsAttrTypeStandard:ENetAddress', 'dsAttrTypeStandard:HardwareUUID']
+    unique_attribs.delete('dsAttrTypeStandard:HardwareUUID') if @kernel_version_major == 9
     all_computers = `/usr/bin/dscl /Local/#{resource[:dslocal_node]} -list /Computers`.split("\n")
     all_computers.reject! { |r| r.eql?("#{resource[:name]}") }
     duplicate_records = []
